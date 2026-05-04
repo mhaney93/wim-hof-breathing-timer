@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wim Hof Breathing Timer</title>
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #070c14;
+            color: #e2e8f0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* Ambient background glows */
+        .glow {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            pointer-events: none;
+            transition: opacity 1.5s ease, background-color 1.5s ease;
+        }
+        #glow1 { width: 500px; height: 500px; top: -200px; left: -150px; background: #3b82f6; opacity: 0.12; }
+        #glow2 { width: 450px; height: 450px; bottom: -180px; right: -120px; background: #8b5cf6; opacity: 0.10; }
+
+        /* App layout */
+        .app {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 28px;
+            z-index: 1;
+            padding: 40px 20px;
+            width: 100%;
+            max-width: 480px;
+        }
+
+        h1 {
+            font-size: 1.1rem;
+            font-weight: 300;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+            color: #475569;
+        }
+
+        /* Phase progress dots */
+        .phases { display: flex; gap: 24px; }
+        .phase-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .phase-item .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #1e293b;
+            border: 2px solid #334155;
+            transition: all 0.4s ease;
+        }
+        .phase-item .dot.active {
+            background: #3b82f6;
+            border-color: #93c5fd;
+            box-shadow: 0 0 12px rgba(59,130,246,0.7);
+        }
+        .phase-item .dot.done {
+            background: #22c55e;
+            border-color: #86efac;
+        }
+        .phase-item .lbl {
+            font-size: 0.58rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #334155;
+            transition: color 0.4s ease;
+        }
+        .phase-item.active .lbl { color: #93c5fd; }
+        .phase-item.done   .lbl { color: #86efac; }
+
+        /* Breathing circle */
+        .circle-wrap {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.04);
+        }
+        .ring:nth-child(1) { width: 295px; height: 295px; }
+        .ring:nth-child(2) { width: 265px; height: 265px; }
+        .ring:nth-child(3) { width: 235px; height: 235px; }
+
+        .circle {
+            position: relative;
+            z-index: 1;
+            border-radius: 50%;
+            width: 170px;
+            height: 170px;
+            background: radial-gradient(circle at 40% 35%, #1e40af 0%, #0c1a3d 100%);
+            box-shadow: 0 0 40px rgba(30,64,175,0.25);
+            transition-property: width, height, background, box-shadow;
+            transition-timing-function: ease-in-out;
+            transition-duration: 0.5s;
+        }
+
+        /* Phase info */
+        .info {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            min-height: 115px;
+        }
+
+        .phase-name {
+            font-size: 2.2rem;
+            font-weight: 700;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+            transition: color 0.5s ease;
+            color: #475569;
+        }
+        .phase-name.inhale  { color: #60a5fa; }
+        .phase-name.exhale  { color: #a78bfa; }
+        .phase-name.hold    { color: #34d399; }
+        .phase-name.squeeze { color: #fbbf24; }
+        .phase-name.done    { color: #86efac; }
+
+        .timer-num {
+            font-size: 4.5rem;
+            font-weight: 100;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 4px;
+            line-height: 1;
+            color: #f8fafc;
+        }
+
+        .hint {
+            font-size: 0.75rem;
+            color: #475569;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            min-height: 18px;
+        }
+
+        /* Progress bar */
+        .bar-wrap {
+            width: 260px;
+            height: 2px;
+            background: #1e293b;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .bar {
+            height: 100%;
+            width: 0%;
+            border-radius: 2px;
+            transition: width 0.08s linear, background-color 1s ease;
+            background: #3b82f6;
+        }
+
+        /* Buttons */
+        .controls { display: flex; gap: 12px; }
+        button {
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 0.88rem;
+            font-weight: 600;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            padding: 14px 40px;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        button:active { transform: scale(0.97) !important; }
+
+        .btn-start {
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(37,99,235,0.35);
+        }
+        .btn-start:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(37,99,235,0.55);
+        }
+        .btn-reset {
+            background: transparent;
+            color: #475569;
+            border: 1px solid #1e293b;
+        }
+        .btn-reset:hover { color: #94a3b8; border-color: #334155; }
+
+        .btn-inhale {
+            background: linear-gradient(135deg, #059669, #0d9488);
+            color: #fff;
+            box-shadow: 0 4px 20px rgba(5,150,105,0.35);
+        }
+        .btn-inhale:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(5,150,105,0.55);
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="glow" id="glow1"></div>
+<div class="glow" id="glow2"></div>
+
+<div class="app">
+    <h1>Wim Hof Breathing</h1>
+
+    <div class="phases">
+        <div class="phase-item" id="pi-0"><div class="dot"></div><div class="lbl">Breathe</div></div>
+        <div class="phase-item" id="pi-1"><div class="dot"></div><div class="lbl">Hold</div></div>
+        <div class="phase-item" id="pi-2"><div class="dot"></div><div class="lbl">Inhale</div></div>
+        <div class="phase-item" id="pi-3"><div class="dot"></div><div class="lbl">Squeeze</div></div>
+    </div>
+
+    <div class="circle-wrap">
+        <div class="ring"></div>
+        <div class="ring"></div>
+        <div class="ring"></div>
+        <div class="circle" id="circle"></div>
+    </div>
+
+    <div class="info">
+        <div class="phase-name" id="phaseName">Ready</div>
+        <div class="timer-num" id="timerNum">—</div>
+        <div class="hint" id="hint">Press start to begin</div>
+    </div>
+
+    <div class="bar-wrap">
+        <div class="bar" id="bar"></div>
+    </div>
+
+    <div class="controls">
+        <button class="btn-reset hidden" id="resetBtn" onclick="doReset()">Reset</button>
+        <button class="btn-inhale hidden" id="inhaleBtn" onclick="skipToInhale()">Inhale</button>
+        <button class="btn-start" id="startBtn" onclick="doStart()">Start</button>
+    </div>
+</div>
+
+<script>
+// ── Sequence ──────────────────────────────────────────────────────────────────
+// 30 cycles × (3s inhale + 2s exhale) = 150s breathing
+// Then: 135s breath hold, 10s recovery inhale, 5s squeeze
+const seq = [];
+for (let i = 0; i < 30; i++) {
+    seq.push({ name: 'Inhale',  type: 'inhale',  dur: 3,   phase: 0, cycle: i + 1 });
+    seq.push({ name: 'Exhale',  type: 'exhale',  dur: 2,   phase: 0, cycle: i + 1 });
+}
+seq.push({ name: 'Hold',    type: 'hold',    dur: 135, phase: 1 });
+seq.push({ name: 'Inhale',  type: 'inhale',  dur: 5,   phase: 2 });
+seq.push({ name: 'Squeeze', type: 'squeeze', dur: 10,  phase: 3 });
+seq.push({ name: 'Done',    type: 'done',    dur: 0,   phase: -1 });
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let stepIdx = 0, elapsed = 0, ticker = null;
+let holdSecsRemaining = null; // set when user bails out of hold early
+const TICK_MS = 50;
+
+// ── Audio ─────────────────────────────────────────────────────────────────────
+let actx = null;
+
+function getCtx() {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+}
+
+function beep(hz, secs, vol = 0.35, wave = 'sine') {
+    try {
+        const c = getCtx();
+        const osc = c.createOscillator();
+        const g   = c.createGain();
+        osc.connect(g);
+        g.connect(c.destination);
+        osc.type = wave;
+        osc.frequency.setValueAtTime(hz, c.currentTime);
+        g.gain.setValueAtTime(vol, c.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + secs);
+        osc.start(c.currentTime);
+        osc.stop(c.currentTime + secs + 0.05);
+    } catch (e) {}
+}
+
+// Inhale: bright high A5 (880 Hz)
+// Exhale: mellow lower G4 (392 Hz)
+const sounds = {
+    inhale:  () => beep(880, 0.35, 0.4),
+    exhale:  () => beep(392, 0.45, 0.30),
+    hold:    () => { beep(528, 0.5, 0.4); setTimeout(() => beep(660, 0.4, 0.25), 400); },
+    squeeze: () => beep(660, 0.4, 0.4, 'triangle'),
+    done:    () => {
+        beep(880, 0.2, 0.5);
+        setTimeout(() => beep(1108, 0.2, 0.5), 220);
+        setTimeout(() => beep(1320, 0.55, 0.5), 440);
+    },
+};
+
+// ── Visuals ───────────────────────────────────────────────────────────────────
+const circle    = document.getElementById('circle');
+const phaseName = document.getElementById('phaseName');
+const timerNum  = document.getElementById('timerNum');
+const hint      = document.getElementById('hint');
+const bar       = document.getElementById('bar');
+const glow1     = document.getElementById('glow1');
+const glow2     = document.getElementById('glow2');
+
+// Each entry: [circleSize, circleGradient, circleShadow, g1color, g1opacity, g2color, g2opacity, barColor]
+const vis = {
+    inhale:  ['270px', 'radial-gradient(circle at 40% 35%, #1d4ed8, #1e3a8a)', '0 0 80px rgba(59,130,246,0.55)',  '#3b82f6', 0.22, '#6366f1', 0.12, '#2563eb'],
+    exhale:  ['130px', 'radial-gradient(circle at 40% 35%, #5b21b6, #2e1065)', '0 0 40px rgba(139,92,246,0.30)',  '#3b82f6', 0.06, '#7c3aed', 0.20, '#7c3aed'],
+    hold:    ['190px', 'radial-gradient(circle at 40% 35%, #065f46, #022c22)', '0 0 60px rgba(16,185,129,0.28)',  '#10b981', 0.13, '#059669', 0.12, '#10b981'],
+    squeeze: ['240px', 'radial-gradient(circle at 40% 35%, #92400e, #451a03)', '0 0 70px rgba(245,158,11,0.35)',  '#f59e0b', 0.18, '#d97706', 0.15, '#f59e0b'],
+    done:    ['210px', 'radial-gradient(circle at 40% 35%, #14532d, #052e16)', '0 0 80px rgba(34,197,94,0.42)',   '#22c55e', 0.18, '#16a34a', 0.15, '#22c55e'],
+    ready:   ['170px', 'radial-gradient(circle at 40% 35%, #1e40af, #0c1a3d)', '0 0 40px rgba(30,64,175,0.25)',   '#3b82f6', 0.12, '#8b5cf6', 0.10, '#3b82f6'],
+};
+
+function applyVis(type, sizeDurSecs) {
+    const v = vis[type] || vis.ready;
+    const [size, bg, shadow, g1c, g1o, g2c, g2o, barC] = v;
+    // For breathing steps use step duration for size transition; others settle quickly
+    const dur = (['inhale', 'exhale'].includes(type) ? sizeDurSecs : 1.5) + 's';
+    circle.style.transitionDuration = `${dur}, ${dur}, 0.8s, 0.8s`;
+    circle.style.width       = size;
+    circle.style.height      = size;
+    circle.style.background  = bg;
+    circle.style.boxShadow   = shadow;
+    glow1.style.backgroundColor = g1c;
+    glow1.style.opacity      = g1o;
+    glow2.style.backgroundColor = g2c;
+    glow2.style.opacity      = g2o;
+    bar.style.backgroundColor = barC;
+}
+
+function setDots(phase) {
+    for (let i = 0; i < 4; i++) {
+        const pi  = document.getElementById(`pi-${i}`);
+        const dot = pi.querySelector('.dot');
+        pi.className  = 'phase-item';
+        dot.className = 'dot';
+        if (phase === i)               { pi.classList.add('active'); dot.classList.add('active'); }
+        else if (phase > i || phase === -1) { pi.classList.add('done');   dot.classList.add('done');   }
+    }
+}
+
+function fmt(secs) {
+    const s = Math.ceil(secs);
+    if (s < 60) return String(s);
+    return `${Math.floor(s / 60).toString().padStart(2,'0')}:${(s % 60).toString().padStart(2,'0')}`;
+}
+
+function render(step, timeLeft) {
+    const pct = step.dur > 0 ? (1 - timeLeft / step.dur) * 100 : 100;
+    bar.style.width = pct + '%';
+
+    phaseName.className = 'phase-name ' + step.type;
+    phaseName.textContent = step.name.toUpperCase();
+    timerNum.textContent  = step.dur > 0 ? fmt(timeLeft) : '✓';
+
+    const phase2hint = holdSecsRemaining !== null
+        ? `${holdSecsRemaining}s remaining when you stopped`
+        : 'Breathe all the way in';
+    const hints = {
+        0:  `Cycle ${step.cycle} of 30`,
+        1:  'Relax and empty your mind',
+        2:  phase2hint,
+        3:  'Hold and flex your core',
+        '-1': 'Round complete — well done!',
+    };
+    hint.textContent = hints[step.phase] ?? '';
+
+    setDots(step.phase);
+}
+
+// ── Timer engine ──────────────────────────────────────────────────────────────
+function runStep(i) {
+    if (i >= seq.length) return;
+    stepIdx = i;
+    elapsed = 0;
+    const step = seq[i];
+
+    if (sounds[step.type]) sounds[step.type]();
+    applyVis(step.type, step.dur);
+    render(step, step.dur);
+
+    // Show the Inhale escape button only during the breath hold phase
+    const inhaleBtn = document.getElementById('inhaleBtn');
+    inhaleBtn.classList.toggle('hidden', step.phase !== 1);
+
+    if (step.dur === 0) {
+        // Final state
+        document.getElementById('startBtn').textContent = 'Restart';
+        document.getElementById('startBtn').onclick = doReset;
+        document.getElementById('startBtn').classList.remove('hidden');
+        document.getElementById('resetBtn').classList.add('hidden');
+        return;
+    }
+
+    ticker = setInterval(() => {
+        elapsed += TICK_MS / 1000;
+        const left = step.dur - elapsed;
+        if (left <= 0) {
+            clearInterval(ticker);
+            runStep(i + 1);
+            return;
+        }
+        render(step, left);
+    }, TICK_MS);
+}
+
+function doStart() {
+    getCtx(); // prime audio on user gesture
+    document.getElementById('startBtn').classList.add('hidden');
+    document.getElementById('resetBtn').classList.remove('hidden');
+    runStep(0);
+}
+
+function skipToInhale() {
+    holdSecsRemaining = Math.ceil(seq[stepIdx].dur - elapsed);
+    clearInterval(ticker);
+    const inhaleIdx = seq.findIndex(s => s.phase === 2);
+    runStep(inhaleIdx);
+}
+
+function doReset() {
+    clearInterval(ticker);
+    stepIdx = 0;
+    elapsed = 0;
+    holdSecsRemaining = null;
+
+    phaseName.className   = 'phase-name';
+    phaseName.textContent = 'Ready';
+    timerNum.textContent  = '—';
+    hint.textContent      = 'Press start to begin';
+    bar.style.width       = '0%';
+
+    applyVis('ready', 1);
+    setDots(-2); // no dot active
+
+    document.getElementById('startBtn').textContent = 'Start';
+    document.getElementById('startBtn').onclick = doStart;
+    document.getElementById('startBtn').classList.remove('hidden');
+    document.getElementById('resetBtn').classList.add('hidden');
+    document.getElementById('inhaleBtn').classList.add('hidden');
+}
+</script>
+</body>
+</html>
