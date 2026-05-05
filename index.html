@@ -262,8 +262,9 @@
 // Then: 135s breath hold, 10s recovery inhale, 5s squeeze
 const seq = [];
 for (let i = 0; i < 30; i++) {
-    seq.push({ name: 'Inhale',  type: 'inhale',  dur: 3,   phase: 0, cycle: i + 1 });
-    seq.push({ name: 'Exhale',  type: 'exhale',  dur: 2,   phase: 0, cycle: i + 1 });
+    const last = i === 29;
+    seq.push({ name: 'Inhale',  type: 'inhale',  dur: 3,   phase: 0, cycle: i + 1, last });
+    seq.push({ name: 'Exhale',  type: 'exhale',  dur: 2,   phase: 0, cycle: i + 1, last });
 }
 seq.push({ name: 'Hold',    type: 'hold',    dur: 135, phase: 1 });
 seq.push({ name: 'Inhale',  type: 'inhale',  dur: 5,   phase: 2 });
@@ -302,12 +303,15 @@ function beep(hz, secs, vol = 0.35, wave = 'sine') {
 
 // Inhale: bright high A5 (880 Hz)
 // Exhale: mellow lower G4 (392 Hz)
+// lastInhale/lastExhale: three-tone warning pattern for the final breath cycle
 const sounds = {
-    inhale:  () => beep(880, 0.35, 0.4),
-    exhale:  () => beep(392, 0.45, 0.30),
-    hold:    () => { beep(528, 0.5, 0.4); setTimeout(() => beep(660, 0.4, 0.25), 400); },
-    squeeze: () => beep(660, 0.4, 0.4, 'triangle'),
-    done:    () => {
+    inhale:      () => beep(880, 0.35, 0.4),
+    exhale:      () => beep(392, 0.45, 0.30),
+    lastInhale:  () => { beep(660, 0.18, 0.45); setTimeout(() => beep(880, 0.18, 0.45), 190); setTimeout(() => beep(1100, 0.3, 0.45), 380); },
+    lastExhale:  () => { beep(523, 0.18, 0.45); setTimeout(() => beep(392, 0.18, 0.40), 200); setTimeout(() => beep(262, 0.5, 0.40), 400); },
+    hold:        () => { beep(528, 0.5, 0.4); setTimeout(() => beep(660, 0.4, 0.25), 400); },
+    squeeze:     () => beep(660, 0.4, 0.4, 'triangle'),
+    done:        () => {
         beep(880, 0.2, 0.5);
         setTimeout(() => beep(1108, 0.2, 0.5), 220);
         setTimeout(() => beep(1320, 0.55, 0.5), 440);
@@ -397,7 +401,8 @@ function runStep(i) {
     elapsed = 0;
     const step = seq[i];
 
-    if (sounds[step.type]) sounds[step.type]();
+    const soundKey = step.last ? 'last' + step.type[0].toUpperCase() + step.type.slice(1) : step.type;
+    if (sounds[soundKey]) sounds[soundKey]();
     applyVis(step.type, step.dur);
     render(step, step.dur);
 
