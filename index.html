@@ -272,7 +272,7 @@ seq.push({ name: 'Squeeze', type: 'squeeze', dur: 10,  phase: 3 });
 seq.push({ name: 'Done',    type: 'done',    dur: 0,   phase: -1 });
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let stepIdx = 0, elapsed = 0, ticker = null;
+let stepIdx = 0, elapsed = 0, ticker = null, stepStartTime = null;
 let holdSecsRemaining = null; // set when user bails out of hold early
 const TICK_MS = 50;
 
@@ -419,8 +419,9 @@ function runStep(i) {
         return;
     }
 
+    stepStartTime = Date.now();
     ticker = setInterval(() => {
-        elapsed += TICK_MS / 1000;
+        elapsed = (Date.now() - stepStartTime) / 1000;
         const left = step.dur - elapsed;
         if (left <= 0) {
             clearInterval(ticker);
@@ -449,6 +450,7 @@ function doReset() {
     clearInterval(ticker);
     stepIdx = 0;
     elapsed = 0;
+    stepStartTime = null;
     holdSecsRemaining = null;
 
     phaseName.className   = 'phase-name';
