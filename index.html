@@ -273,7 +273,8 @@ seq.push({ name: 'Done',    type: 'done',    dur: 0,   phase: -1 });
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let stepIdx = 0, elapsed = 0, ticker = null, stepStartTime = null;
-let holdSecsRemaining = null; // set when user bails out of hold early
+// null = hold hasn't happened; 0 = full hold completed; N = secs left when bailed
+let holdSecsRemaining = null;
 const TICK_MS = 50;
 
 // ── Audio ─────────────────────────────────────────────────────────────────────
@@ -379,15 +380,17 @@ function render(step, timeLeft) {
     phaseName.textContent = step.name.toUpperCase();
     timerNum.textContent  = step.dur > 0 ? fmt(timeLeft) : '✓';
 
-    const phase2hint = holdSecsRemaining !== null
-        ? `${holdSecsRemaining}s remaining when you stopped`
-        : 'Breathe all the way in';
+    const holdHint = holdSecsRemaining === null
+        ? null
+        : holdSecsRemaining === 0
+            ? 'Full hold completed!'
+            : `${holdSecsRemaining}s remaining when you stopped`;
     const hints = {
         0:  `Cycle ${step.cycle} of 30`,
         1:  'Relax and empty your mind',
-        2:  phase2hint,
-        3:  'Hold and flex your core',
-        '-1': 'Round complete — well done!',
+        2:  holdHint ?? 'Breathe all the way in',
+        3:  holdHint ? `Hold and flex your core · ${holdHint}` : 'Hold and flex your core',
+        '-1': holdHint ? `Round complete — well done! · ${holdHint}` : 'Round complete — well done!',
     };
     hint.textContent = hints[step.phase] ?? '';
 
@@ -425,6 +428,7 @@ function runStep(i) {
         const left = step.dur - elapsed;
         if (left <= 0) {
             clearInterval(ticker);
+            if (step.type === 'hold') holdSecsRemaining = 0;
             runStep(i + 1);
             return;
         }
