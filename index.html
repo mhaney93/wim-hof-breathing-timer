@@ -157,6 +157,14 @@
             min-height: 18px;
         }
 
+        .hold-result {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #4ade80;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
         /* Progress bar */
         .bar-wrap {
             width: 260px;
@@ -242,6 +250,7 @@
     <div class="info">
         <div class="phase-name" id="phaseName">Ready</div>
         <div class="timer-num" id="timerNum">—</div>
+        <div class="hold-result hidden" id="holdResult"></div>
         <div class="hint" id="hint">Press start to begin</div>
     </div>
 
@@ -320,11 +329,12 @@ const sounds = {
 };
 
 // ── Visuals ───────────────────────────────────────────────────────────────────
-const circle    = document.getElementById('circle');
-const phaseName = document.getElementById('phaseName');
-const timerNum  = document.getElementById('timerNum');
-const hint      = document.getElementById('hint');
-const bar       = document.getElementById('bar');
+const circle     = document.getElementById('circle');
+const phaseName  = document.getElementById('phaseName');
+const timerNum   = document.getElementById('timerNum');
+const holdResult = document.getElementById('holdResult');
+const hint       = document.getElementById('hint');
+const bar        = document.getElementById('bar');
 const glow1     = document.getElementById('glow1');
 const glow2     = document.getElementById('glow2');
 
@@ -390,9 +400,16 @@ function render(step, timeLeft) {
         1:  'Relax and empty your mind',
         2:  holdHint ?? 'Breathe all the way in',
         3:  holdHint ? `Hold and flex your core · ${holdHint}` : 'Hold and flex your core',
-        '-1': holdHint ? `Round complete — well done! · ${holdHint}` : 'Round complete — well done!',
+        '-1': 'Round complete — well done!',
     };
     hint.textContent = hints[step.phase] ?? '';
+
+    if (step.phase === -1 && holdHint) {
+        holdResult.textContent = holdHint;
+        holdResult.classList.remove('hidden');
+    } else {
+        holdResult.classList.add('hidden');
+    }
 
     setDots(step.phase);
 }
