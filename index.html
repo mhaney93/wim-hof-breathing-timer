@@ -280,8 +280,16 @@ seq.push({ name: 'Inhale',  type: 'inhale',  dur: 5,   phase: 2 });
 seq.push({ name: 'Squeeze', type: 'squeeze', dur: 10,  phase: 3 });
 seq.push({ name: 'Done',    type: 'done',    dur: 0,   phase: -1 });
 
+// Cumulative step start times from session start (used for background catch-up)
+const seqStarts = (() => {
+    const a = [];
+    let t = 0;
+    for (const s of seq) { a.push(t); t += s.dur; }
+    return a;
+})();
+
 // ── State ─────────────────────────────────────────────────────────────────────
-let stepIdx = 0, elapsed = 0, ticker = null, stepStartTime = null;
+let stepIdx = 0, elapsed = 0, ticker = null, stepStartTime = null, sessionStartTime = null;
 // null = hold hasn't happened; 0 = full hold completed; N = secs left when bailed
 let holdSecsRemaining = null;
 const TICK_MS = 50;
@@ -415,16 +423,19 @@ function render(step, timeLeft) {
 }
 
 // ── Timer engine ──────────────────────────────────────────────────────────────
-function runStep(i) {
+// elapsed0 > 0 when resuming mid-step after a background catch-up (skips sounds)
+function runStep(i, elapsed0 = 0) {
     if (i >= seq.length) return;
     stepIdx = i;
-    elapsed = 0;
+    elapsed = elapsed0;
     const step = seq[i];
 
-    const soundKey = step.last ? 'last' + step.type[0].toUpperCase() + step.type.slice(1) : step.type;
-    if (sounds[soundKey]) sounds[soundKey]();
+    if (!elapsed0) {
+        const soundKey = step.last ? 'last' + step.type[0].toUpperCase() + step.type.slice(1) : step.type;
+        if (sounds[soundKey]) sounds[soundKey]();
+    }
     applyVis(step.type, step.dur);
-    render(step, step.dur);
+    render(step, Math.max(0, step.dur - elapsed0));
 
     // Show the Inhale escape button only during the breath hold phase
     const inhaleBtn = document.getElementById('inhaleBtn');
@@ -439,7 +450,7 @@ function runStep(i) {
         return;
     }
 
-    stepStartTime = Date.now();
+    stepStartTime = Date.now() - elapsed0 * 1000;
     ticker = setInterval(() => {
         elapsed = (Date.now() - stepStartTime) / 1000;
         const left = step.dur - elapsed;
@@ -455,13 +466,16 @@ function runStep(i) {
 
 function doStart() {
     getCtx(); // prime audio on user gesture
+    sessionStartTime = Date.now();
     document.getElementById('startBtn').classList.add('hidden');
     document.getElementById('resetBtn').classList.remove('hidden');
     runStep(0);
 }
 
 function skipToInhale() {
-    holdSecsRemaining = Math.ceil(seq[stepIdx].dur - elapsed);
+    // Use fresh wall-clock elapsed in case the interval was throttled while backgrounded
+    const currentElapsed = stepStartTime ? (Date.now() - stepStartTime) / 1000 : elapsed;
+    holdSecsRemaining = Math.ceil(seq[stepIdx].dur - currentElapsed);
     clearInterval(ticker);
     const inhaleIdx = seq.findIndex(s => s.phase === 2);
     runStep(inhaleIdx);
@@ -472,6 +486,7 @@ function doReset() {
     stepIdx = 0;
     elapsed = 0;
     stepStartTime = null;
+    sessionStartTime = null;
     holdSecsRemaining = null;
 
     phaseName.className   = 'phase-name';
@@ -489,6 +504,33 @@ function doReset() {
     document.getElementById('resetBtn').classList.add('hidden');
     document.getElementById('inhaleBtn').classList.add('hidden');
 }
+
+// ── Background catch-up ────────────────────────────────────────────────────────
+// When the browser suspends or throttles timers for a background tab, pick up
+// exactly where we should be based on wall-clock time when the tab re-appears.
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !sessionStartTime) return;
+    if (seq[stepIdx].dur === 0) return; // already on done screen
+
+    const totalElapsed = (Date.now() - sessionStartTime) / 1000;
+
+    // Find which step we should currently be on
+    let targetIdx = seq.length - 1;
+    for (let i = 0; i < seq.length; i++) {
+        if (seq[i].dur === 0 || totalElapsed < seqStarts[i] + seq[i].dur) {
+            targetIdx = i;
+            break;
+        }
+    }
+
+    // If we advanced past the hold while backgrounded, mark it completed
+    const holdIdx = seq.findIndex(s => s.type === 'hold');
+    if (holdSecsRemaining === null && targetIdx > holdIdx) holdSecsRemaining = 0;
+
+    clearInterval(ticker);
+    const timeIntoStep = Math.max(0, totalElapsed - seqStarts[targetIdx]);
+    runStep(targetIdx, timeIntoStep);
+});
 </script>
 </body>
 </html>
