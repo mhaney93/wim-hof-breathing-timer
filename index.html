@@ -292,6 +292,7 @@ const seqStarts = (() => {
 let stepIdx = 0, elapsed = 0, ticker = null, stepStartTime = null, sessionStartTime = null;
 // null = hold hasn't happened; 0 = full hold completed; N = secs left when bailed
 let holdSecsRemaining = null;
+let timerGen = 0; // incremented each time a new ticker is created; stale callbacks bail out early
 const TICK_MS = 50;
 
 // ── Audio ─────────────────────────────────────────────────────────────────────
@@ -406,13 +407,13 @@ function render(step, timeLeft) {
     const hints = {
         0:  `Cycle ${step.cycle} of 30`,
         1:  'Relax and empty your mind',
-        2:  holdHint ?? 'Breathe all the way in',
-        3:  holdHint ? `Hold and flex your core · ${holdHint}` : 'Hold and flex your core',
+        2:  'Breathe all the way in',
+        3:  'Hold and flex your core',
         '-1': 'Round complete — well done!',
     };
     hint.textContent = hints[step.phase] ?? '';
 
-    if (step.phase === -1 && holdHint) {
+    if (holdHint && (step.phase === -1 || step.phase === 2 || step.phase === 3)) {
         holdResult.textContent = holdHint;
         holdResult.classList.remove('hidden');
     } else {
@@ -429,6 +430,8 @@ function runStep(i, elapsed0 = 0) {
     stepIdx = i;
     elapsed = elapsed0;
     const step = seq[i];
+
+    const gen = ++timerGen;
 
     if (!elapsed0) {
         const soundKey = step.last ? 'last' + step.type[0].toUpperCase() + step.type.slice(1) : step.type;
@@ -452,6 +455,7 @@ function runStep(i, elapsed0 = 0) {
 
     stepStartTime = Date.now() - elapsed0 * 1000;
     ticker = setInterval(() => {
+        if (timerGen !== gen) return; // stale callback from a previous step, ignore
         elapsed = (Date.now() - stepStartTime) / 1000;
         const left = step.dur - elapsed;
         if (left <= 0) {
@@ -478,6 +482,9 @@ function skipToInhale() {
     holdSecsRemaining = Math.ceil(seq[stepIdx].dur - currentElapsed);
     clearInterval(ticker);
     const inhaleIdx = seq.findIndex(s => s.phase === 2);
+    // Shift sessionStartTime so visibilitychange catch-up treats this moment as the scheduled
+    // start of the inhale step — otherwise returning from another tab restarts the hold.
+    sessionStartTime = Date.now() - seqStarts[inhaleIdx] * 1000;
     runStep(inhaleIdx);
 }
 
