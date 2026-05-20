@@ -456,8 +456,8 @@ function runStep(i, elapsed0 = 0) {
     stepStartTime = Date.now() - elapsed0 * 1000;
     ticker = setInterval(() => {
         if (timerGen !== gen) return; // stale callback from a previous step, ignore
-        elapsed = (Date.now() - stepStartTime) / 1000;
-        const left = step.dur - elapsed;
+        const totalElapsed = (Date.now() - sessionStartTime) / 1000;
+        const left = seqStarts[i] + step.dur - totalElapsed;
         if (left <= 0) {
             clearInterval(ticker);
             if (step.type === 'hold') holdSecsRemaining = 0;
