@@ -265,6 +265,9 @@
     </div>
 </div>
 
+<audio id="keepAlive" loop playsinline
+    src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="></audio>
+
 <script>
 // ── Sequence ──────────────────────────────────────────────────────────────────
 // 30 cycles × (3s inhale + 2s exhale) = 150s breathing
@@ -446,6 +449,7 @@ function runStep(i, elapsed0 = 0) {
 
     if (step.dur === 0) {
         // Final state
+        document.getElementById('keepAlive').pause();
         document.getElementById('startBtn').textContent = 'Restart';
         document.getElementById('startBtn').onclick = doReset;
         document.getElementById('startBtn').classList.remove('hidden');
@@ -470,6 +474,8 @@ function runStep(i, elapsed0 = 0) {
 
 function doStart() {
     getCtx(); // prime audio on user gesture
+    const keepAlive = document.getElementById('keepAlive');
+    keepAlive.play().catch(() => {});
     sessionStartTime = Date.now();
     document.getElementById('startBtn').classList.add('hidden');
     document.getElementById('resetBtn').classList.remove('hidden');
@@ -490,6 +496,7 @@ function skipToInhale() {
 
 function doReset() {
     clearInterval(ticker);
+    document.getElementById('keepAlive').pause();
     stepIdx = 0;
     elapsed = 0;
     stepStartTime = null;
@@ -519,6 +526,10 @@ function doReset() {
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !sessionStartTime) return;
     if (seq[stepIdx].dur === 0) return; // already on done screen
+
+    // The OS may have paused the keep-alive loop while backgrounded; restart it.
+    const keepAlive = document.getElementById('keepAlive');
+    if (keepAlive.paused) keepAlive.play().catch(() => {});
 
     const totalElapsed = (Date.now() - sessionStartTime) / 1000;
 
