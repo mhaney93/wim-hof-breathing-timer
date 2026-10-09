@@ -23,13 +23,14 @@
         /* Ambient background glows */
         .glow {
             position: fixed;
-            border-radius: 50%;
-            filter: blur(100px);
             pointer-events: none;
+            /* Soft edge via mask instead of filter: blur() — far cheaper to repaint */
+            -webkit-mask-image: radial-gradient(circle closest-side, #000 0%, transparent 100%);
+            mask-image: radial-gradient(circle closest-side, #000 0%, transparent 100%);
             transition: opacity 1.5s ease, background-color 1.5s ease;
         }
-        #glow1 { width: 500px; height: 500px; top: -200px; left: -150px; background: #3b82f6; opacity: 0.12; }
-        #glow2 { width: 450px; height: 450px; bottom: -180px; right: -120px; background: #8b5cf6; opacity: 0.10; }
+        #glow1 { width: 800px; height: 800px; top: -350px; left: -300px; background: #3b82f6; opacity: 0.12; }
+        #glow2 { width: 750px; height: 750px; bottom: -330px; right: -270px; background: #8b5cf6; opacity: 0.10; }
 
         /* App layout */
         .app {
@@ -108,11 +109,14 @@
             position: relative;
             z-index: 1;
             border-radius: 50%;
-            width: 170px;
-            height: 170px;
+            width: 270px;
+            height: 270px;
+            flex-shrink: 0;
+            transform: scale(0.63);
+            will-change: transform;
             background: radial-gradient(circle at 40% 35%, #1e40af 0%, #0c1a3d 100%);
             box-shadow: 0 0 40px rgba(30,64,175,0.25);
-            transition-property: width, height, background, box-shadow;
+            transition-property: transform, box-shadow;
             transition-timing-function: ease-in-out;
             transition-duration: 0.5s;
         }
@@ -176,9 +180,11 @@
         }
         .bar {
             height: 100%;
-            width: 0%;
+            width: 100%;
             border-radius: 2px;
-            transition: width 0.08s linear, background-color 1s ease;
+            transform: scaleX(0);
+            transform-origin: left;
+            will-change: transform;
             background: #3b82f6;
         }
 
@@ -366,9 +372,8 @@ function applyVis(type, sizeDurSecs) {
     const [size, bg, shadow, g1c, g1o, g2c, g2o, barC] = v;
     // For breathing steps use step duration for size transition; others settle quickly
     const dur = (['inhale', 'exhale'].includes(type) ? sizeDurSecs : 1.5) + 's';
-    circle.style.transitionDuration = `${dur}, ${dur}, 0.8s, 0.8s`;
-    circle.style.width       = size;
-    circle.style.height      = size;
+    circle.style.transitionDuration = `${dur}, 0.8s`;
+    circle.style.transform   = `scale(${parseInt(size) / 270})`;
     circle.style.background  = bg;
     circle.style.boxShadow   = shadow;
     glow1.style.backgroundColor = g1c;
@@ -395,13 +400,30 @@ function fmt(secs) {
     return `${Math.floor(s / 60).toString().padStart(2,'0')}:${(s % 60).toString().padStart(2,'0')}`;
 }
 
+// Jump the bar to `from` (0–1), then let CSS animate it to full over `secs`
+function animateBar(from, secs) {
+    bar.style.transition = 'none';
+    bar.style.transform  = `scaleX(${from})`;
+    if (secs > 0) {
+        bar.getBoundingClientRect(); // commit start position before transitioning
+        bar.style.transition = `transform ${secs}s linear, background-color 1s ease`;
+        bar.style.transform  = 'scaleX(1)';
+    }
+}
+
+// Per-tick update: only touch the DOM when the displayed number changes
+function renderTime(step, timeLeft) {
+    const txt = step.dur > 0 ? fmt(timeLeft) : '✓';
+    if (timerNum.textContent !== txt) timerNum.textContent = txt;
+}
+
+// Per-step update: labels, dots and progress bar
 function render(step, timeLeft) {
-    const pct = step.dur > 0 ? (1 - timeLeft / step.dur) * 100 : 100;
-    bar.style.width = pct + '%';
+    animateBar(step.dur > 0 ? 1 - timeLeft / step.dur : 1, timeLeft);
 
     phaseName.className = 'phase-name ' + step.type;
     phaseName.textContent = step.name.toUpperCase();
-    timerNum.textContent  = step.dur > 0 ? fmt(timeLeft) : '✓';
+    renderTime(step, timeLeft);
 
     const hints = {
         0:  `Cycle ${step.cycle} of 30`,
@@ -469,7 +491,7 @@ function runStep(i, elapsed0 = 0) {
             runStep(i + 1);
             return;
         }
-        render(step, left);
+        renderTime(step, left);
     }, TICK_MS);
 }
 
@@ -509,7 +531,7 @@ function doReset() {
     timerNum.textContent  = '—';
     hint.textContent      = 'Press start to begin';
     holdResult.classList.add('hidden');
-    bar.style.width       = '0%';
+    animateBar(0, 0);
 
     applyVis('ready', 1);
     setDots(-2); // no dot active
