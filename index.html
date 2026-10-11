@@ -21,16 +21,17 @@
         }
 
         /* Ambient background glows */
+        /* One fixed-colour layer per glow colour; phases only cross-fade opacity,
+           which runs on the compositor with no repaints */
         .glow {
             position: fixed;
             pointer-events: none;
-            /* Soft edge via mask instead of filter: blur() — far cheaper to repaint */
-            -webkit-mask-image: radial-gradient(circle closest-side, #000 0%, transparent 100%);
-            mask-image: radial-gradient(circle closest-side, #000 0%, transparent 100%);
-            transition: opacity 1.5s ease, background-color 1.5s ease;
+            opacity: 0;
+            will-change: opacity;
+            transition: opacity 1.5s ease;
         }
-        #glow1 { width: 800px; height: 800px; top: -350px; left: -300px; background: #3b82f6; opacity: 0.12; }
-        #glow2 { width: 750px; height: 750px; bottom: -330px; right: -270px; background: #8b5cf6; opacity: 0.10; }
+        .glow.g1 { width: 800px; height: 800px; top: -350px; left: -300px; }
+        .glow.g2 { width: 750px; height: 750px; bottom: -330px; right: -270px; }
 
         /* App layout */
         .app {
@@ -116,7 +117,7 @@
             will-change: transform;
             background: radial-gradient(circle at 40% 35%, #1e40af 0%, #0c1a3d 100%);
             box-shadow: 0 0 40px rgba(30,64,175,0.25);
-            transition-property: transform, box-shadow;
+            transition-property: transform;
             transition-timing-function: ease-in-out;
             transition-duration: 0.5s;
         }
@@ -234,8 +235,12 @@
 </head>
 <body>
 
-<div class="glow" id="glow1"></div>
-<div class="glow" id="glow2"></div>
+<div class="glow g1" id="g1-blue"></div>
+<div class="glow g1" id="g1-green"></div>
+<div class="glow g1" id="g1-amber"></div>
+<div class="glow g2" id="g2-violet"></div>
+<div class="glow g2" id="g2-green"></div>
+<div class="glow g2" id="g2-amber"></div>
 
 <div class="app">
     <h1>Wim Hof Breathing</h1>
@@ -272,8 +277,7 @@
     </div>
 </div>
 
-<audio id="keepAlive" loop playsinline
-    src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="></audio>
+<audio id="keepAlive" loop playsinline></audio>
 
 <script>
 // ── Sequence ──────────────────────────────────────────────────────────────────
@@ -347,6 +351,21 @@ const sounds = {
     },
 };
 
+// Keep-alive track: 1s of real silence (8 kHz, 8-bit mono). A zero-length looping
+// file makes the media element restart in a tight loop and stalls the main thread.
+document.getElementById('keepAlive').src = (() => {
+    const rate = 8000, n = rate;
+    const buf = new ArrayBuffer(44 + n);
+    const v = new DataView(buf);
+    const str = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+    str(0, 'RIFF'); v.setUint32(4, 36 + n, true); str(8, 'WAVE');
+    str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+    str(36, 'data'); v.setUint32(40, n, true);
+    new Uint8Array(buf, 44).fill(128); // 8-bit PCM midpoint = silence
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+})();
+
 // ── Visuals ───────────────────────────────────────────────────────────────────
 const circle     = document.getElementById('circle');
 const phaseName  = document.getElementById('phaseName');
@@ -354,17 +373,20 @@ const timerNum   = document.getElementById('timerNum');
 const holdResult = document.getElementById('holdResult');
 const hint       = document.getElementById('hint');
 const bar        = document.getElementById('bar');
-const glow1     = document.getElementById('glow1');
-const glow2     = document.getElementById('glow2');
+const glowColors = { blue: '#3b82f6', violet: '#7c3aed', green: '#10b981', amber: '#f59e0b' };
+const glows = [...document.querySelectorAll('.glow')];
+for (const g of glows) {
+    g.style.background = `radial-gradient(circle closest-side, ${glowColors[g.id.slice(3)]}, transparent)`;
+}
 
 // Each entry: [circleSize, circleGradient, circleShadow, g1color, g1opacity, g2color, g2opacity, barColor]
 const vis = {
-    inhale:  ['270px', 'radial-gradient(circle at 40% 35%, #1d4ed8, #1e3a8a)', '0 0 80px rgba(59,130,246,0.55)',  '#3b82f6', 0.22, '#6366f1', 0.12, '#2563eb'],
-    exhale:  ['130px', 'radial-gradient(circle at 40% 35%, #5b21b6, #2e1065)', '0 0 40px rgba(139,92,246,0.30)',  '#3b82f6', 0.06, '#7c3aed', 0.20, '#7c3aed'],
-    hold:    ['190px', 'radial-gradient(circle at 40% 35%, #065f46, #022c22)', '0 0 60px rgba(16,185,129,0.28)',  '#10b981', 0.13, '#059669', 0.12, '#10b981'],
-    squeeze: ['240px', 'radial-gradient(circle at 40% 35%, #92400e, #451a03)', '0 0 70px rgba(245,158,11,0.35)',  '#f59e0b', 0.18, '#d97706', 0.15, '#f59e0b'],
-    done:    ['210px', 'radial-gradient(circle at 40% 35%, #14532d, #052e16)', '0 0 80px rgba(34,197,94,0.42)',   '#22c55e', 0.18, '#16a34a', 0.15, '#22c55e'],
-    ready:   ['170px', 'radial-gradient(circle at 40% 35%, #1e40af, #0c1a3d)', '0 0 40px rgba(30,64,175,0.25)',   '#3b82f6', 0.12, '#8b5cf6', 0.10, '#3b82f6'],
+    inhale:  ['270px', 'radial-gradient(circle at 40% 35%, #1d4ed8, #1e3a8a)', '0 0 80px rgba(59,130,246,0.55)',  'blue',  0.22, 'violet', 0.12, '#2563eb'],
+    exhale:  ['130px', 'radial-gradient(circle at 40% 35%, #5b21b6, #2e1065)', '0 0 40px rgba(139,92,246,0.30)',  'blue',  0.06, 'violet', 0.20, '#7c3aed'],
+    hold:    ['190px', 'radial-gradient(circle at 40% 35%, #065f46, #022c22)', '0 0 60px rgba(16,185,129,0.28)',  'green', 0.13, 'green',  0.12, '#10b981'],
+    squeeze: ['240px', 'radial-gradient(circle at 40% 35%, #92400e, #451a03)', '0 0 70px rgba(245,158,11,0.35)',  'amber', 0.18, 'amber',  0.15, '#f59e0b'],
+    done:    ['210px', 'radial-gradient(circle at 40% 35%, #14532d, #052e16)', '0 0 80px rgba(34,197,94,0.42)',   'green', 0.18, 'green',  0.15, '#22c55e'],
+    ready:   ['170px', 'radial-gradient(circle at 40% 35%, #1e40af, #0c1a3d)', '0 0 40px rgba(30,64,175,0.25)',   'blue',  0.12, 'violet', 0.10, '#3b82f6'],
 };
 
 function applyVis(type, sizeDurSecs) {
@@ -372,16 +394,18 @@ function applyVis(type, sizeDurSecs) {
     const [size, bg, shadow, g1c, g1o, g2c, g2o, barC] = v;
     // For breathing steps use step duration for size transition; others settle quickly
     const dur = (['inhale', 'exhale'].includes(type) ? sizeDurSecs : 1.5) + 's';
-    circle.style.transitionDuration = `${dur}, 0.8s`;
+    circle.style.transitionDuration = dur;
     circle.style.transform   = `scale(${parseInt(size) / 270})`;
     circle.style.background  = bg;
     circle.style.boxShadow   = shadow;
-    glow1.style.backgroundColor = g1c;
-    glow1.style.opacity      = g1o;
-    glow2.style.backgroundColor = g2c;
-    glow2.style.opacity      = g2o;
+    const want = { [`g1-${g1c}`]: g1o, [`g2-${g2c}`]: g2o };
+    for (const g of glows) {
+        const o = String(want[g.id] ?? 0);
+        if (g.style.opacity !== o) g.style.opacity = o;
+    }
     bar.style.backgroundColor = barC;
 }
+applyVis('ready', 1);
 
 function setDots(phase) {
     for (let i = 0; i < 4; i++) {
