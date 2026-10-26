@@ -247,6 +247,8 @@
         }
         .tab:hover { color: #94a3b8; }
         .tab.active { background: #1e293b; color: #e2e8f0; }
+        .tab:disabled { opacity: 0.35; cursor: not-allowed; }
+        .tab:disabled:hover { color: #475569; }
 
         .hidden { display: none !important; }
     </style>
@@ -551,6 +553,7 @@ function runStep(i, elapsed0 = 0) {
         document.getElementById('startBtn').onclick = doReset;
         document.getElementById('startBtn').classList.remove('hidden');
         document.getElementById('resetBtn').classList.add('hidden');
+        lockTabs(false);
         return;
     }
 
@@ -574,6 +577,7 @@ function doStart() {
     const keepAlive = document.getElementById('keepAlive');
     keepAlive.play().catch(() => {});
     sessionStartTime = Date.now();
+    lockTabs(true);
     document.getElementById('startBtn').classList.add('hidden');
     document.getElementById('resetBtn').classList.remove('hidden');
     runStep(0);
@@ -615,9 +619,16 @@ function doReset() {
     document.getElementById('startBtn').classList.remove('hidden');
     document.getElementById('resetBtn').classList.add('hidden');
     document.getElementById('inhaleBtn').classList.add('hidden');
+    lockTabs(false);
+}
+
+// While a session runs, the inactive tab is disabled so a stray tap can't end it
+function lockTabs(locked) {
+    for (const k of Object.keys(modes)) document.getElementById(`tab-${k}`).disabled = locked && modes[k] !== mode;
 }
 
 function setMode(key) {
+    if (modes[key] === mode) return;
     doReset();
     mode = modes[key];
     seq = mode.seq;
