@@ -230,6 +230,24 @@
             box-shadow: 0 8px 30px rgba(5,150,105,0.55);
         }
 
+        /* Mode tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            padding: 4px;
+            border: 1px solid #1e293b;
+            border-radius: 50px;
+        }
+        .tab {
+            background: transparent;
+            color: #475569;
+            font-size: 0.68rem;
+            letter-spacing: 2px;
+            padding: 8px 18px;
+        }
+        .tab:hover { color: #94a3b8; }
+        .tab.active { background: #1e293b; color: #e2e8f0; }
+
         .hidden { display: none !important; }
     </style>
 </head>
@@ -243,7 +261,12 @@
 <div class="glow g2" id="g2-amber"></div>
 
 <div class="app">
-    <h1>Wim Hof Breathing</h1>
+    <div class="tabs">
+        <button class="tab active" id="tab-wimhof" onclick="setMode('wimhof')">Wim Hof · 5 min</button>
+        <button class="tab" id="tab-nasal" onclick="setMode('nasal')">4:6 · 1 min</button>
+    </div>
+
+    <h1 id="title">Wim Hof Breathing</h1>
 
     <div class="phases">
         <div class="phase-item" id="pi-0"><div class="dot"></div><div class="lbl">Breathe</div></div>
@@ -280,27 +303,54 @@
 <audio id="keepAlive" loop playsinline></audio>
 
 <script>
-// ── Sequence ──────────────────────────────────────────────────────────────────
-// 30 cycles × (3s inhale + 2s exhale) = 150s breathing
-// Then: 135s breath hold, 10s recovery inhale, 5s squeeze
-const seq = [];
-for (let i = 0; i < 30; i++) {
-    const last = i === 29;
-    seq.push({ name: 'Inhale',  type: 'inhale',  dur: 3,   phase: 0, cycle: i + 1, last });
-    seq.push({ name: 'Exhale',  type: 'exhale',  dur: 2,   phase: 0, cycle: i + 1, last });
+// ── Sequences ─────────────────────────────────────────────────────────────────
+function breaths(cycles, inDur, outDur) {
+    const a = [];
+    for (let i = 0; i < cycles; i++) {
+        const last = i === cycles - 1;
+        a.push({ name: 'Inhale', type: 'inhale', dur: inDur,  phase: 0, cycle: i + 1, last });
+        a.push({ name: 'Exhale', type: 'exhale', dur: outDur, phase: 0, cycle: i + 1, last });
+    }
+    return a;
 }
-seq.push({ name: 'Hold',    type: 'hold',    dur: 135, phase: 1 });
-seq.push({ name: 'Inhale',  type: 'inhale',  dur: 5,   phase: 2 });
-seq.push({ name: 'Squeeze', type: 'squeeze', dur: 10,  phase: 3 });
-seq.push({ name: 'Done',    type: 'done',    dur: 0,   phase: -1 });
 
 // Cumulative step start times from session start (used for background catch-up)
-const seqStarts = (() => {
+function startsOf(seq) {
     const a = [];
     let t = 0;
     for (const s of seq) { a.push(t); t += s.dur; }
     return a;
-})();
+}
+
+const modes = {
+    // 30 cycles × (3s inhale + 2s exhale) = 150s breathing
+    // Then: 135s breath hold, 5s recovery inhale, 10s squeeze
+    wimhof: {
+        title: 'Wim Hof Breathing',
+        cycles: 30,
+        breathHint: '',
+        seq: [
+            ...breaths(30, 3, 2),
+            { name: 'Hold',    type: 'hold',    dur: 135, phase: 1 },
+            { name: 'Inhale',  type: 'inhale',  dur: 5,   phase: 2 },
+            { name: 'Squeeze', type: 'squeeze', dur: 10,  phase: 3 },
+            { name: 'Done',    type: 'done',    dur: 0,   phase: -1 },
+        ],
+    },
+    // 6 cycles × (4s inhale + 6s exhale) = 60s of easy nasal breathing
+    nasal: {
+        title: '4:6 Nasal Breathing',
+        cycles: 6,
+        breathHint: ' · through the nose',
+        seq: [
+            ...breaths(6, 4, 6),
+            { name: 'Done', type: 'done', dur: 0, phase: -1 },
+        ],
+    },
+};
+for (const m of Object.values(modes)) m.starts = startsOf(m.seq);
+
+let mode = modes.wimhof, seq = mode.seq, seqStarts = mode.starts;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let stepIdx = 0, elapsed = 0, ticker = null, stepStartTime = null, sessionStartTime = null;
@@ -411,7 +461,7 @@ function setDots(phase) {
     for (let i = 0; i < 4; i++) {
         const pi  = document.getElementById(`pi-${i}`);
         const dot = pi.querySelector('.dot');
-        pi.className  = 'phase-item';
+        pi.classList.remove('active', 'done');
         dot.className = 'dot';
         if (phase === i)               { pi.classList.add('active'); dot.classList.add('active'); }
         else if (phase > i || phase === -1) { pi.classList.add('done');   dot.classList.add('done');   }
@@ -450,7 +500,7 @@ function render(step, timeLeft) {
     renderTime(step, timeLeft);
 
     const hints = {
-        0:  `Cycle ${step.cycle} of 30`,
+        0:  `Cycle ${step.cycle} of ${mode.cycles}${mode.breathHint}`,
         1:  'Relax and empty your mind',
         2:  'Breathe all the way in',
         3:  'Hold and flex your core',
@@ -567,6 +617,17 @@ function doReset() {
     document.getElementById('inhaleBtn').classList.add('hidden');
 }
 
+function setMode(key) {
+    doReset();
+    mode = modes[key];
+    seq = mode.seq;
+    seqStarts = mode.starts;
+    document.getElementById('title').textContent = mode.title;
+    // The 4:6 guide is breathing only, so it shows just the first phase dot
+    for (let i = 1; i < 4; i++) document.getElementById(`pi-${i}`).classList.toggle('hidden', key !== 'wimhof');
+    for (const k of Object.keys(modes)) document.getElementById(`tab-${k}`).classList.toggle('active', k === key);
+}
+
 // ── Background catch-up ────────────────────────────────────────────────────────
 // When the browser suspends or throttles timers for a background tab, pick up
 // exactly where we should be based on wall-clock time when the tab re-appears.
@@ -591,7 +652,7 @@ document.addEventListener('visibilitychange', () => {
 
     // If we advanced past the hold while backgrounded, mark it completed
     const holdIdx = seq.findIndex(s => s.type === 'hold');
-    if (holdSecsRemaining === null && targetIdx > holdIdx) holdSecsRemaining = 0;
+    if (holdIdx >= 0 && holdSecsRemaining === null && targetIdx > holdIdx) holdSecsRemaining = 0;
 
     clearInterval(ticker);
     const timeIntoStep = Math.max(0, totalElapsed - seqStarts[targetIdx]);
