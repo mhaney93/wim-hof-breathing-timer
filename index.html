@@ -679,7 +679,7 @@ function setMode(key) {
 
 // ── Hold log ──────────────────────────────────────────────────────────────────
 // Entries live in localStorage as [{t: epoch ms, secs: hold seconds}]. Rendered only
-// on load and when a hold is logged, never per tick.
+// on load, when a hold is logged, and when the tab becomes visible, never per tick.
 const LOG_KEY = 'wimhofHoldLog';
 const LOG_DAYS = 7;
 
@@ -739,7 +739,9 @@ renderLog();
 // When the browser suspends or throttles timers for a background tab, pick up
 // exactly where we should be based on wall-clock time when the tab re-appears.
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || !sessionStartTime) return;
+    if (document.visibilityState !== 'visible') return;
+    renderLog();
+    if (!sessionStartTime) return;
     if (seq[stepIdx].dur === 0) return; // already on done screen
 
     // The OS may have paused the keep-alive loop while backgrounded; restart it.
