@@ -250,6 +250,28 @@
         .tab:disabled { opacity: 0.35; cursor: not-allowed; }
         .tab:disabled:hover { color: #475569; }
 
+        /* Hold log */
+        .log {
+            width: 100%;
+            border-top: 1px solid #1e293b;
+            padding-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            font-size: 0.75rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #475569;
+        }
+        .log-title { text-align: center; }
+        .log-compare { display: flex; justify-content: space-around; text-align: center; }
+        .log-compare b { display: block; font-size: 1.2rem; font-weight: 300; color: #e2e8f0; margin-top: 4px; }
+        .log-verdict { text-align: center; font-weight: 600; color: #94a3b8; }
+        .log-verdict.better { color: #4ade80; }
+        .log-verdict.worse  { color: #f87171; }
+        .log-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+        .log-list li { display: flex; justify-content: space-between; color: #64748b; }
+
         .hidden { display: none !important; }
     </style>
 </head>
@@ -300,6 +322,16 @@
         <button class="btn-inhale hidden" id="inhaleBtn" onclick="skipToInhale()">Inhale</button>
         <button class="btn-start" id="startBtn" onclick="doStart()">Start</button>
     </div>
+
+    <section class="log">
+        <div class="log-title">Breath hold log</div>
+        <div class="log-compare">
+            <div>Today<b id="logToday">—</b></div>
+            <div>Yesterday<b id="logYesterday">—</b></div>
+        </div>
+        <div class="log-verdict" id="logVerdict"></div>
+        <ul class="log-list" id="logList"></ul>
+    </section>
 </div>
 
 <audio id="keepAlive" loop playsinline></audio>
@@ -358,6 +390,7 @@ let mode = modes.wimhof, seq = mode.seq, seqStarts = mode.starts;
 let stepIdx = 0, elapsed = 0, ticker = null, stepStartTime = null, sessionStartTime = null;
 // null = hold hasn't happened; 0 = full hold completed; N = secs left when bailed
 let holdSecsRemaining = null;
+let holdLogged = false; // the current session's hold has been saved to the log
 let timerGen = 0; // incremented each time a new ticker is created; stale callbacks bail out early
 const TICK_MS = 50;
 
@@ -537,6 +570,10 @@ function runStep(i, elapsed0 = 0) {
                 ? 'Full hold completed!'
                 : `${holdSecsRemaining}s left when you stopped`;
             holdResult.classList.remove('hidden');
+            if (!holdLogged) {
+                holdLogged = true;
+                logHold(seq.find(s => s.type === 'hold').dur - holdSecsRemaining);
+            }
         }
     } else {
         holdResult.classList.add('hidden');
@@ -603,6 +640,7 @@ function doReset() {
     stepStartTime = null;
     sessionStartTime = null;
     holdSecsRemaining = null;
+    holdLogged = false;
 
     phaseName.className   = 'phase-name';
     phaseName.textContent = 'Ready';
@@ -639,11 +677,71 @@ function setMode(key) {
     for (const k of Object.keys(modes)) document.getElementById(`tab-${k}`).classList.toggle('active', k === key);
 }
 
+// ── Hold log ──────────────────────────────────────────────────────────────────
+// Entries live in localStorage as [{t: epoch ms, secs: hold seconds}]. Rendered only
+// on load, when a hold is logged, and when the tab becomes visible, never per tick.
+const LOG_KEY = 'wimhofHoldLog';
+const LOG_DAYS = 7;
+
+function loadLog() {
+    try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch { return []; }
+}
+
+function dayKey(d) { return d.toDateString(); }
+
+function logHold(secs) {
+    const cutoff = Date.now() - LOG_DAYS * 864e5;
+    const log = loadLog().filter(e => e.t >= cutoff);
+    log.push({ t: Date.now(), secs });
+    try { localStorage.setItem(LOG_KEY, JSON.stringify(log)); } catch {}
+    renderLog(log);
+}
+
+function renderLog(log = loadLog()) {
+    const now = new Date();
+    const yest = new Date(now); yest.setDate(now.getDate() - 1);
+    const best = key => {
+        const s = log.filter(e => dayKey(new Date(e.t)) === key).map(e => e.secs);
+        return s.length ? Math.max(...s) : null;
+    };
+    const today = best(dayKey(now)), yesterday = best(dayKey(yest));
+    document.getElementById('logToday').textContent = today === null ? '—' : `${today}s`;
+    document.getElementById('logYesterday').textContent = yesterday === null ? '—' : `${yesterday}s`;
+
+    const verdict = document.getElementById('logVerdict');
+    verdict.className = 'log-verdict';
+    if (yesterday === null) {
+        verdict.textContent = 'No hold yesterday — today sets the bar';
+    } else if (today === null) {
+        verdict.textContent = `Beat ${yesterday}s today`;
+    } else {
+        const diff = today - yesterday;
+        verdict.textContent = diff > 0 ? `▲ Better by ${diff}s` : diff < 0 ? `▼ Worse by ${-diff}s` : '= Same as yesterday';
+        if (diff) verdict.classList.add(diff > 0 ? 'better' : 'worse');
+    }
+
+    const cutoff = Date.now() - LOG_DAYS * 864e5;
+    document.getElementById('logList').innerHTML = log
+        .filter(e => e.t >= cutoff)
+        .sort((a, b) => b.t - a.t)
+        .map(e => {
+            const d = new Date(e.t);
+            const when = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
+                + ' ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            return `<li><span>${when}</span><span>${e.secs}s</span></li>`;
+        })
+        .join('') || '<li><span>No sessions logged yet</span></li>';
+}
+
+renderLog();
+
 // ── Background catch-up ────────────────────────────────────────────────────────
 // When the browser suspends or throttles timers for a background tab, pick up
 // exactly where we should be based on wall-clock time when the tab re-appears.
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || !sessionStartTime) return;
+    if (document.visibilityState !== 'visible') return;
+    renderLog();
+    if (!sessionStartTime) return;
     if (seq[stepIdx].dur === 0) return; // already on done screen
 
     // The OS may have paused the keep-alive loop while backgrounded; restart it.
