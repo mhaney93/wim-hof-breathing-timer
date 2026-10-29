@@ -249,6 +249,9 @@
         .tab.active { background: #1e293b; color: #e2e8f0; }
         .tab:disabled { opacity: 0.35; cursor: not-allowed; }
         .tab:disabled:hover { color: #475569; }
+        @media (max-width: 480px) {
+            .tab { letter-spacing: 0.5px; padding: 8px 10px; white-space: nowrap; }
+        }
 
         /* Hold log */
         .log {
@@ -288,6 +291,7 @@
     <div class="tabs">
         <button class="tab active" id="tab-wimhof" onclick="setMode('wimhof')">Wim Hof · 5 min</button>
         <button class="tab" id="tab-nasal" onclick="setMode('nasal')">4:6 · 1 min</button>
+        <button class="tab" id="tab-nasal10" onclick="setMode('nasal10')">4:6 · 10 min</button>
     </div>
 
     <h1 id="title">Wim Hof Breathing</h1>
@@ -378,6 +382,16 @@ const modes = {
         breathHint: ' · through the nose',
         seq: [
             ...breaths(6, 4, 6),
+            { name: 'Done', type: 'done', dur: 0, phase: -1 },
+        ],
+    },
+    // 60 cycles × (4s inhale + 6s exhale) = 10 min of easy nasal breathing
+    nasal10: {
+        title: '4:6 Nasal Breathing',
+        cycles: 60,
+        breathHint: ' · through the nose',
+        seq: [
+            ...breaths(60, 4, 6),
             { name: 'Done', type: 'done', dur: 0, phase: -1 },
         ],
     },
