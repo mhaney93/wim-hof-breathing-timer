@@ -1,0 +1,6 @@
+{
+  "name": "wim-hof-breathing-timer",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@vercel/blob": "^2.9.0" }
+}
