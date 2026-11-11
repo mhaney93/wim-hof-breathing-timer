@@ -586,7 +586,8 @@ function runStep(i, elapsed0 = 0) {
             holdResult.classList.remove('hidden');
             if (!holdLogged) {
                 holdLogged = true;
-                logHold(seq.find(s => s.type === 'hold').dur - holdSecsRemaining);
+                const holdDur = seq.find(s => s.type === 'hold').dur;
+                logHold(holdDur - holdSecsRemaining, holdSecsRemaining);
             }
         }
     } else {
@@ -692,7 +693,7 @@ function setMode(key) {
 }
 
 // ── Hold log ──────────────────────────────────────────────────────────────────
-// Entries live in localStorage as [{t: epoch ms, secs: hold seconds}]. Rendered only
+// Entries live in localStorage as [{t: epoch ms, secs: hold seconds, left: seconds remaining when stopped}]. Rendered only
 // on load, when a hold is logged, and when the tab becomes visible, never per tick.
 const LOG_KEY = 'wimhofHoldLog';
 const LOG_DAYS = 7;
@@ -703,10 +704,10 @@ function loadLog() {
 
 function dayKey(d) { return d.toDateString(); }
 
-function logHold(secs) {
+function logHold(secs, left) {
     const cutoff = Date.now() - LOG_DAYS * 864e5;
     const log = loadLog().filter(e => e.t >= cutoff);
-    log.push({ t: Date.now(), secs });
+    log.push({ t: Date.now(), secs, left });
     try { localStorage.setItem(LOG_KEY, JSON.stringify(log)); } catch {}
     renderLog(log);
 }
@@ -719,18 +720,27 @@ function renderLog(log = loadLog()) {
         return s.length ? Math.max(...s) : null;
     };
     const today = best(dayKey(now)), yesterday = best(dayKey(yest));
+    // Yesterday shows the time left on the LAST hold of yesterday (when you bowed out).
+    const yEntries = log.filter(e => dayKey(new Date(e.t)) === dayKey(yest)).sort((a, b) => a.t - b.t);
+    const yLast = yEntries[yEntries.length - 1];
+    let yText = '—';
+    if (yLast) {
+        if (typeof yLast.left !== 'number') yText = `${yLast.secs}s held`; // older entry, no remaining time stored
+        else if (yLast.left === 0) yText = 'finished';
+        else yText = `${Math.floor(yLast.left / 60)}:${String(yLast.left % 60).padStart(2, '0')} left`;
+    }
     document.getElementById('logToday').textContent = today === null ? '—' : `${today}s`;
-    document.getElementById('logYesterday').textContent = yesterday === null ? '—' : `${yesterday}s`;
+    document.getElementById('logYesterday').textContent = yText;
 
     const verdict = document.getElementById('logVerdict');
     verdict.className = 'log-verdict';
     if (yesterday === null) {
         verdict.textContent = 'No hold yesterday — today sets the bar';
     } else if (today === null) {
-        verdict.textContent = `Beat ${yesterday}s today`;
+        verdict.textContent = `Beat yesterday's ${yesterday}s hold today`;
     } else {
         const diff = today - yesterday;
-        verdict.textContent = diff > 0 ? `▲ Better by ${diff}s` : diff < 0 ? `▼ Worse by ${-diff}s` : '= Same as yesterday';
+        verdict.textContent = diff > 0 ? `▲ Better by ${diff}s` : diff < 0 ? `▼ Worse by ${-diff}s` : '= Same hold as yesterday';
         if (diff) verdict.classList.add(diff > 0 ? 'better' : 'worse');
     }
 
