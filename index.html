@@ -269,11 +269,6 @@
         .log-title { text-align: center; }
         .log-compare { display: flex; justify-content: space-around; text-align: center; }
         .log-compare b { display: block; font-size: 1.2rem; font-weight: 300; color: #e2e8f0; margin-top: 4px; }
-        .log-verdict { text-align: center; font-weight: 600; color: #94a3b8; }
-        .log-verdict.better { color: #4ade80; }
-        .log-verdict.worse  { color: #f87171; }
-        .log-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
-        .log-list li { display: flex; justify-content: space-between; color: #64748b; }
 
         .hidden { display: none !important; }
     </style>
@@ -330,11 +325,8 @@
     <section class="log">
         <div class="log-title">Breath hold log</div>
         <div class="log-compare">
-            <div>Today<b id="logToday">—</b></div>
             <div>Yesterday<b id="logYesterday">—</b></div>
         </div>
-        <div class="log-verdict" id="logVerdict"></div>
-        <ul class="log-list" id="logList"></ul>
     </section>
 </div>
 
@@ -697,6 +689,7 @@ function setMode(key) {
 // on load, when a hold is logged, and when the tab becomes visible, never per tick.
 const LOG_KEY = 'wimhofHoldLog';
 const LOG_DAYS = 7;
+const HOLD_TARGET = 135; // Wim Hof hold length in seconds
 
 function loadLog() {
     try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch { return []; }
@@ -712,49 +705,22 @@ function logHold(secs, left) {
     renderLog(log);
 }
 
+// Remaining time for an entry. Older entries have no stored `left`; derive it from the
+// configured hold length (HOLD_TARGET) minus the seconds held, otherwise unknown.
+function leftOf(e) {
+    if (typeof e.left === 'number') return e.left;
+    if (typeof e.secs === 'number') return Math.max(0, HOLD_TARGET - e.secs);
+    return null;
+}
+
 function renderLog(log = loadLog()) {
-    const now = new Date();
-    const yest = new Date(now); yest.setDate(now.getDate() - 1);
-    const best = key => {
-        const s = log.filter(e => dayKey(new Date(e.t)) === key).map(e => e.secs);
-        return s.length ? Math.max(...s) : null;
-    };
-    const today = best(dayKey(now)), yesterday = best(dayKey(yest));
-    // Yesterday shows the time left on the LAST hold of yesterday (when you bowed out).
+    const yest = new Date(); yest.setDate(yest.getDate() - 1);
     const yEntries = log.filter(e => dayKey(new Date(e.t)) === dayKey(yest)).sort((a, b) => a.t - b.t);
     const yLast = yEntries[yEntries.length - 1];
     let yText = '—';
-    if (yLast) {
-        if (typeof yLast.left !== 'number') yText = `${yLast.secs}s held`; // older entry, no remaining time stored
-        else if (yLast.left === 0) yText = 'finished';
-        else yText = `${Math.floor(yLast.left / 60)}:${String(yLast.left % 60).padStart(2, '0')} left`;
-    }
-    document.getElementById('logToday').textContent = today === null ? '—' : `${today}s`;
+    const left = yLast ? leftOf(yLast) : null;
+    if (left !== null) yText = left === 0 ? 'finished' : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} left`;
     document.getElementById('logYesterday').textContent = yText;
-
-    const verdict = document.getElementById('logVerdict');
-    verdict.className = 'log-verdict';
-    if (yesterday === null) {
-        verdict.textContent = 'No hold yesterday — today sets the bar';
-    } else if (today === null) {
-        verdict.textContent = `Beat yesterday's ${yesterday}s hold today`;
-    } else {
-        const diff = today - yesterday;
-        verdict.textContent = diff > 0 ? `▲ Better by ${diff}s` : diff < 0 ? `▼ Worse by ${-diff}s` : '= Same hold as yesterday';
-        if (diff) verdict.classList.add(diff > 0 ? 'better' : 'worse');
-    }
-
-    const cutoff = Date.now() - LOG_DAYS * 864e5;
-    document.getElementById('logList').innerHTML = log
-        .filter(e => e.t >= cutoff)
-        .sort((a, b) => b.t - a.t)
-        .map(e => {
-            const d = new Date(e.t);
-            const when = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
-                + ' ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-            return `<li><span>${when}</span><span>${e.secs}s</span></li>`;
-        })
-        .join('') || '<li><span>No sessions logged yet</span></li>';
 }
 
 renderLog();
