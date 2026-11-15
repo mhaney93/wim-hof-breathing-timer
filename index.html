@@ -156,11 +156,18 @@
         }
 
         .hint {
-            font-size: 0.75rem;
-            color: #475569;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #cbd5e1;
             letter-spacing: 2px;
             text-transform: uppercase;
-            min-height: 18px;
+            line-height: 1.3;
+            min-height: 1.3em;
+            text-align: center;
+        }
+        .hint .cycle-num { color: #ffffff; font-weight: 800; font-size: 1.35em; }
+        @media (max-width: 480px) {
+            .hint { font-size: 1.25rem; letter-spacing: 1px; }
         }
 
         .hold-result {
@@ -550,7 +557,14 @@ function render(step, timeLeft) {
         3:  'Hold and flex your core',
         '-1': 'Round complete — well done!',
     };
-    hint.textContent = hints[step.phase] ?? '';
+    if (step.phase === 0) {
+        const num = document.createElement('span');
+        num.className = 'cycle-num';
+        num.textContent = step.cycle;
+        hint.replaceChildren('Cycle ', num, ` of ${mode.cycles}${mode.breathHint}`);
+    } else {
+        hint.textContent = hints[step.phase] ?? '';
+    }
 
     setDots(step.phase);
 }
