@@ -335,7 +335,7 @@
     <section class="log">
         <div class="log-title">Breath hold log</div>
         <div class="log-compare">
-            <div>Yesterday<b id="logYesterday">—</b></div>
+            <div><span id="logYesterdayLabel">Yesterday</span><b id="logYesterday">—</b></div>
         </div>
     </section>
 </div>
@@ -761,12 +761,19 @@ function leftOf(e) {
 }
 
 function renderLog(log = loadLog()) {
-    const yest = new Date(); yest.setDate(yest.getDate() - 1);
-    const yEntries = log.filter(e => dayKey(new Date(e.t)) === dayKey(yest)).sort((a, b) => a.t - b.t);
-    const yLast = yEntries[yEntries.length - 1];
-    let yText = '—';
-    const left = yLast ? leftOf(yLast) : null;
-    if (left !== null) yText = left === 0 ? 'finished' : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} left`;
+    // Yesterday's last hold; if none, the last hold from the most recent earlier day, labelled with its date.
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const yest = new Date(today); yest.setDate(yest.getDate() - 1);
+    const past = log.filter(e => e.t < today.getTime() && leftOf(e) !== null).sort((a, b) => a.t - b.t);
+    const last = past[past.length - 1];
+    let label = 'Yesterday', yText = '—';
+    if (last) {
+        const d = new Date(last.t);
+        if (dayKey(d) !== dayKey(yest)) label = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        const left = leftOf(last);
+        yText = left === 0 ? 'finished' : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} left`;
+    }
+    document.getElementById('logYesterdayLabel').textContent = label;
     document.getElementById('logYesterday').textContent = yText;
 }
 
